@@ -194,7 +194,7 @@ pub fn create_canonical_request(
         })
         .also(|ans| {
             // <CanonicalURI>\n
-            uri_encode(ans, uri_path, false);
+            ans.push_str(uri_path);
             ans.push('\n');
         })
         .also(|ans| {
