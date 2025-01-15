@@ -353,10 +353,10 @@ impl S3Storage for FileSystem {
         let file_metadata = trace_try!(file.metadata().await);
         let last_modified = time::to_rfc3339(trace_try!(file_metadata.modified()));
 
-        let content_length = {
+        let (content_length, content_range) = {
             let file_len = file_metadata.len();
-            let content_len = match range {
-                None => file_len,
+            let (content_len, content_range) = match range {
+                None => (file_len, None),
                 Some(Range::Normal { first, last }) => {
                     if first >= file_len {
                         let err =
@@ -369,9 +369,12 @@ impl S3Storage for FileSystem {
                     //      len = last + 1 - first
                     // or   len = file_len - first
 
-                    last.and_then(|x| x.checked_add(1))
+                    let last = last
+                        .and_then(|x| x.checked_add(1))
                         .unwrap_or(file_len)
-                        .wrapping_sub(first)
+                        .wrapping_sub(first);
+
+                    (last, Some(format!("bytes {}-{}/{}", first, last, file_len)))
                 }
                 Some(Range::Suffix { last }) => {
                     let offset = Some(last)
@@ -386,10 +389,10 @@ impl S3Storage for FileSystem {
                             code_error!(InvalidRange, "The requested range cannot be satisfied.");
                         return Err(err.into());
                     }
-                    last
+                    (last, Some(format!("bytes 0-{}/{}", last, file_len)))
                 }
             };
-            trace_try!(usize::try_from(content_len))
+            (trace_try!(usize::try_from(content_len)), content_range)
         };
 
         let stream = BytesStream::new(file, 4096, Some(content_length));
@@ -414,6 +417,7 @@ impl S3Storage for FileSystem {
         let output: GetObjectOutput = GetObjectOutput {
             body: Some(crate::dto::ByteStream::new(stream)),
             content_length: Some(trace_try!(content_length.try_into())),
+            content_range,
             last_modified: Some(last_modified),
             metadata: object_metadata,
             e_tag: Some(format!("\"{}\"", md5_sum)),

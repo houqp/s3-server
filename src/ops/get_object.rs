@@ -101,6 +101,9 @@ impl S3Output for GetObjectOutput {
             res.set_optional_header(CONTENT_DISPOSITION, self.content_disposition)?;
             res.set_optional_header(CONTENT_ENCODING, self.content_encoding)?;
             res.set_optional_header(CONTENT_LANGUAGE, self.content_language)?;
+            if self.content_range.is_some() {
+                res.set_status(http::StatusCode::PARTIAL_CONTENT);
+            }
             res.set_optional_header(CONTENT_RANGE, self.content_range)?;
             res.set_optional_header(CONTENT_TYPE, self.content_type)?;
 
